@@ -4,12 +4,13 @@
 /** @typedef {{ key?: string, name?: string, agent?: boolean, shell?: boolean }} Program */
 /** @typedef {{ tab: string, terminal: string | null, status: string | null, program?: Program, title?: string, cwd?: string | null }} Pane */
 /** @typedef {{ address: string, name?: string | null, title?: string | null, labels?: Record<string, string> }} Terminal */
-/** @typedef {{ id: string, name: string, named: boolean, index?: number }} Tab */
+/** @typedef {{ id: string, name: string, named: boolean }} Tab */
 /** @typedef {{ tabs?: Tab[] }} Space */
 /** @typedef {{ project: string, title: string }} Task */
 /** @typedef {Map<string, Task>} Tasks */
 /** @typedef {Tab & { pane: Pane, terminal: Terminal | null, agent?: boolean }} AgentTab */
-/** @typedef {{ name: string, at: number, base?: string }} Sent */
+/** @typedef {{ name: string, at: number }} Sent */
+/** `base`: left by this fork's former tab numbers (`1 · x` -> `x`), read once to undo them. */
 /** @typedef {string | { name: string, prev?: string, base?: string }} Owned */
 /** What a tab without an agent is named after: its program, its folder, both, or nothing (false). */
 /** @typedef {"program" | "folder" | "both" | false | null | undefined} Shells */
@@ -227,19 +228,6 @@ export function wantedName(entry, tasks, { shells = null } = {}) {
 }
 
 /**
- * `number` on: the tab's position in front of its name (`2 · Fix login`), so the name says
- * which `tab.select:<n>` key reaches it. A string is the format: `{n}` and `{name}`.
- * @param {number | undefined} index
- * @param {string} base
- * @param {boolean | string | null | undefined} number
- */
-export function formatName(index, base, number) {
-  if (!number || !Number.isInteger(index)) return base;
-  const format = typeof number === "string" && number.includes("{name}") ? number : "{n} · {name}";
-  return format.replace("{n}", String(index)).replace("{name}", base);
-}
-
-/**
  * @param {Pane} pane
  * @param {Terminal | null} terminal
  */
@@ -268,7 +256,7 @@ export function agentTabs(spaces, panes, terminals, { shells = null } = {}) {
         .filter((p) => p.tab === tab.id && p.terminal)
         .map((pane) => ({ pane, terminal: byAddress.get(pane.terminal) ?? null }));
       const agents = all.filter(({ pane, terminal }) => isAgentPane(pane, terminal));
-      const own = { id: tab.id, name: tab.name, named: tab.named, ...(tab.index !== undefined && { index: tab.index }) };
+      const own = { id: tab.id, name: tab.name, named: tab.named };
       if (agents.length) {
         const pick = agents.find((a) => a.terminal?.labels?.[FIRSTMATE_TASK]) ?? agents[0];
         out.push({ ...own, ...pick });
@@ -299,14 +287,13 @@ export function countNamed(tabs) {
  * Returns the renames to run and the next `owned` / `pending`.
  * `tabIds` (every tab that exists) prunes ownership of closed tabs. `force` (a click)
  * sends a wanted rename again even while the same one is still pending.
- * `number` puts the tab's position in front (see formatName); the name without it is kept
- * as `base`, so a tab that moves is renumbered with the name it had. `shells` names tabs
+ * `shells` names tabs
  * without an agent (see shellName) and lets an agent with nothing to say be named after
  * its program, but only while its tab has no name.
  * @param {AgentTab[]} tabs
- * @param {{ owned?: Record<string, Owned>, pending?: Record<string, Sent>, tasks?: Tasks, now?: number, tabIds?: Set<string> | null, force?: boolean, number?: boolean | string | null, shells?: Shells }} state
+ * @param {{ owned?: Record<string, Owned>, pending?: Record<string, Sent>, tasks?: Tasks, now?: number, tabIds?: Set<string> | null, force?: boolean, shells?: Shells }} state
  */
-export function reconcile(tabs, { owned = {}, pending = {}, tasks = new Map(), now = 0, tabIds = null, force = false, number = null, shells = null }) {
+export function reconcile(tabs, { owned = {}, pending = {}, tasks = new Map(), now = 0, tabIds = null, force = false, shells = null }) {
   /** @type {Record<string, { name: string, prev?: string, base?: string }>} */
   const nextOwned = {};
   /** @type {Record<string, Sent>} */
@@ -318,7 +305,7 @@ export function reconcile(tabs, { owned = {}, pending = {}, tasks = new Map(), n
   const renames = [];
   for (const tab of tabs) {
     const sent = pending[tab.id];
-    if (tab.named && tab.name === sent?.name) nextOwned[tab.id] = { name: tab.name, base: sent.base };
+    if (tab.named && tab.name === sent?.name) nextOwned[tab.id] = { name: tab.name };
     else if (tab.named && tab.name === nextOwned[tab.id]?.name) nextOwned[tab.id] = { name: tab.name, base: nextOwned[tab.id].base };
     else if (sent && now - sent.at < PENDING_MS) nextPending[tab.id] = sent;
     const mine = nextOwned[tab.id];
@@ -327,30 +314,21 @@ export function reconcile(tabs, { owned = {}, pending = {}, tasks = new Map(), n
       continue;
     }
     const want = wantedName(tab, tasks, { shells });
-    // The name without its number. A fallback (a bare task id, an agent's program name)
-    // never replaces a name this mod already gave, and a source with nothing to say keeps
-    // it: then the base is the one the tab has, renumbered if the tab moved.
+    // A fallback (a bare task id, an agent's program name) never replaces a name this mod
+    // already gave, and a source with nothing to say keeps it (without a number this
+    // fork once put in front of it: `base`).
     /** @type {string | null} */
-    let base = null;
-    if (want && !(want.fallback && tab.named)) base = want.name;
-    else if (tab.named && mine) base = mine.base ?? mine.name;
-    if (base === null) continue;
-    const name = formatName(tab.index, base, number);
-    if (tab.named && tab.name === name) {
-      if (mine && mine.name === name) mine.base = base;
-      continue;
-    }
+    let name = null;
+    if (want && !(want.fallback && tab.named)) name = want.name;
+    else if (tab.named && mine) name = mine.base ?? mine.name;
+    if (name === null || (tab.named && tab.name === name)) continue;
     if (!force && nextPending[tab.id]?.name === name) continue;
     renames.push({ id: tab.id, name });
-    nextOwned[tab.id] = tab.named ? { name, prev: tab.name, base } : { name, base };
-    nextPending[tab.id] = base === name ? { name, at: now } : { name, at: now, base };
+    nextOwned[tab.id] = tab.named ? { name, prev: tab.name } : { name };
+    nextPending[tab.id] = { name, at: now };
   }
   /** @type {Record<string, Owned>} */
   const savedOwned = {};
-  for (const [id, { name, prev, base }] of Object.entries(nextOwned)) {
-    const keepBase = base !== undefined && base !== name;
-    savedOwned[id] = prev === undefined && !keepBase ? name
-      : { name, ...(prev !== undefined && { prev }), ...(keepBase && { base }) };
-  }
+  for (const [id, { name, prev }] of Object.entries(nextOwned)) savedOwned[id] = prev === undefined ? name : { name, prev };
   return { renames, owned: savedOwned, pending: nextPending };
 }

@@ -35,13 +35,6 @@ function shellsMode() {
   return value === "folder" || value === "both" ? value : "program";
 }
 
-/** The tab number in front of names (`number` prop): on by default, `false` turns it off, a string is the format (`"{n}: {name}"`). */
-function numberMode() {
-  const value = props()?.number;
-  if (value === false) return false;
-  return typeof value === "string" && value.includes("{name}") ? value : true;
-}
-
 function currentAgentTabs() {
   return agentTabs(spaces(), panes(), terminals(), { shells: shellsMode() });
 }
@@ -115,7 +108,7 @@ export default class TabNamer extends View {
   apply(tabs, force) {
     const owned = /** @type {Record<string, import("./naming.js").Owned>} */ (shared(OWNED) ?? {});
     const tabIds = new Set(spaces().flatMap((s) => s.tabs.map((t) => t.id)));
-    const next = reconcile(tabs, { owned, pending: this.pending, tasks: this.tasks, now: Date.now(), tabIds, force, number: numberMode(), shells: shellsMode() });
+    const next = reconcile(tabs, { owned, pending: this.pending, tasks: this.tasks, now: Date.now(), tabIds, force, shells: shellsMode() });
     for (const r of next.renames) run("tab.rename", { id: r.id, name: r.name });
     this.pending = next.pending;
     if (JSON.stringify(next.owned) !== JSON.stringify(owned)) setShared(OWNED, next.owned);
