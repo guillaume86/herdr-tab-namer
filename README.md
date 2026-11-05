@@ -68,6 +68,21 @@ with none of these stays unnamed until one shows up.
 
 4. Check it: `herdr-app check ~/.config/herdr-app/mods/herdr-tab-namer`.
 
+### Shell tabs and tab numbers (this fork)
+
+Two more props, both on by default in this fork:
+
+- `shells`: tabs with no agent are named after their first terminal: `"program"` (the
+  default: what runs there now, `PowerShell`, `Neovim`, `bash`), `"folder"` (its live
+  folder, `~` at home), `"both"` (`Neovim · app`), or `false` to leave them alone as
+  upstream does. An agent tab whose agent has said nothing yet is named after its
+  program (`Claude Code`) while it has no name; that never replaces a better name.
+- `number`: the tab's position in front of every name the mod writes (`2 Fix login`), so
+  the name says which `tab.select:<n>` key reaches it. `false` turns it off; a string is
+  the format, with `{n}` and `{name}` (`"{n}: {name}"`). The name without its number is
+  remembered, so a tab that moves is renumbered and keeps its name. Names you gave are
+  never touched, so they don't get a number.
+
 ### In the status bar (this fork)
 
 With `"status_bar": true` the mod draws a strip for the bottom status bar instead of the

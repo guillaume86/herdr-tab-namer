@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   MAX_NAME, PENDING_MS, agentTabs, cleanTitle, countNamed, firstmateName, generalName,
-  parseBacklog, reconcile, stripProject, truncate,
+  parseBacklog, reconcile, stripProject, truncate, folderName, shellName, formatName,
 } from "../mods/herdr-tab-namer/naming.js";
 
 const claude = { key: "claude", name: "Claude Code", agent: true, shell: false };
@@ -235,4 +235,71 @@ test("a task the home doesn't know is named by its id, but never over a better n
   const tasks = new Map([["new-task", { project: "app", title: "New task" }]]);
   const upgraded = reconcile([tab("new-task", true)], { owned: { a: "new-task" }, tasks, now: 0 });
   assert.deepEqual(upgraded.renames, [{ id: "a", name: "app · New task" }], "the id gives way once the title is known");
+});
+
+// ── fork: shell tabs and tab numbers ──
+
+test("folderName gives the last folder, ~ for a home folder", () => {
+  assert.equal(folderName("/home/me/src/app/"), "app");
+  assert.equal(folderName("D:\\dev\\herdr-app"), "herdr-app");
+  assert.equal(folderName("/home/me"), "~");
+  assert.equal(folderName("C:\\Users\\me"), "~");
+  assert.equal(folderName(null), "");
+});
+
+test("shellName follows the shells mode", () => {
+  const pane = { program: zsh, cwd: "/home/me/src/app" };
+  assert.equal(shellName(pane, "program"), "zsh");
+  assert.equal(shellName(pane, "folder"), "app");
+  assert.equal(shellName(pane, "both"), "zsh · app");
+  assert.equal(shellName(pane, false), null);
+  assert.equal(shellName({ program: { name: "" } }, "program"), null);
+});
+
+test("formatName puts the tab number in front", () => {
+  assert.equal(formatName(2, "nvim", true), "2 nvim");
+  assert.equal(formatName(2, "nvim", "{n}: {name}"), "2: nvim");
+  assert.equal(formatName(2, "nvim", false), "nvim");
+  assert.equal(formatName(undefined, "nvim", true), "nvim");
+});
+
+test("with shells on, tabs without an agent are listed by their first terminal", () => {
+  const { spaces, panes, terminals } = world();
+  const tabs = agentTabs(spaces, panes, terminals, { shells: "program" });
+  assert.deepEqual(tabs.map((t) => t.id), ["a", "b", "c", "d"]);
+  assert.equal(tabs[1].agent, false);
+  assert.equal(tabs[1].terminal.address, "t3");
+  const modOnly = agentTabs([{ id: "s", tabs: [{ id: "m", name: "1", named: false }] }], [{ pane: "p", tab: "m", terminal: null }], [], { shells: "program" });
+  assert.deepEqual(modOnly, [], "a tab with only mod panes is left alone");
+});
+
+test("a shell tab follows its program, with its number in front", () => {
+  const tab = (name, named, program, index = 2) => ({ id: "b", name, named, index, agent: false, terminal: null, pane: { program: { key: "x", name: program } } });
+  const opts = { number: true, shells: "program" };
+  const first = reconcile([tab("2", false, "PowerShell")], { ...opts, now: 0 });
+  assert.deepEqual(first.renames, [{ id: "b", name: "2 PowerShell" }]);
+  assert.deepEqual(first.owned, { b: { name: "2 PowerShell", base: "PowerShell" } });
+  const nvim = reconcile([tab("2 PowerShell", true, "Neovim")], { ...opts, owned: first.owned, now: 6000 });
+  assert.deepEqual(nvim.renames, [{ id: "b", name: "2 Neovim" }], "follows the program running now");
+  const person = reconcile([tab("logs", true, "Neovim")], { ...opts, owned: first.owned, now: 6000 });
+  assert.deepEqual(person.renames, [], "a person's name stays");
+});
+
+test("a tab that moves is renumbered with the name it has, even when its source is quiet", () => {
+  const tab = (name, index, title) => ({ id: "a", name, named: true, index, terminal: { title }, pane: { program: claude } });
+  const opts = { number: true, shells: "program" };
+  const owned = { a: { name: "1 Fix login", base: "Fix login" } };
+  const moved = reconcile([tab("1 Fix login", 3, "✳ Claude Code")], { ...opts, owned, now: 0 });
+  assert.deepEqual(moved.renames, [{ id: "a", name: "3 Fix login" }], "the program name never replaces a title it had");
+  const upstreamOwned = reconcile([tab("Fix login", 1, "✳ Claude Code")], { ...opts, owned: { a: "Fix login" }, now: 0 });
+  assert.deepEqual(upstreamOwned.renames, [{ id: "a", name: "1 Fix login" }], "names saved before the number get it");
+  const off = reconcile([tab("3 Fix login", 3, "✳ Claude Code")], { owned: moved.owned, now: 6000 });
+  assert.deepEqual(off.renames, [{ id: "a", name: "Fix login" }], "turning the number off takes it away");
+});
+
+test("an agent with nothing to say yet is named after its program, only while unnamed", () => {
+  const tab = (name, named) => ({ id: "a", name, named, index: 1, terminal: { title: "✳ Claude Code" }, pane: { program: claude } });
+  const opts = { number: true, shells: "program" };
+  assert.deepEqual(reconcile([tab("1", false)], { ...opts, now: 0 }).renames, [{ id: "a", name: "1 Claude Code" }]);
+  assert.deepEqual(reconcile([tab("1", false)], { now: 0 }).renames, [], "upstream behaviour without the options");
 });

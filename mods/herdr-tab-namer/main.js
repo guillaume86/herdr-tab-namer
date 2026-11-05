@@ -24,8 +24,26 @@ function firstmateHome() {
   return path === "~" || path.startsWith("~/") ? home() + path.slice(1) : path;
 }
 
+/**
+ * What tabs without an agent are named after (`shells` prop): `"program"` (the default),
+ * `"folder"`, `"both"`, or `false` to leave them alone as upstream does.
+ * @returns {import("./naming.js").Shells}
+ */
+function shellsMode() {
+  const value = props()?.shells;
+  if (value === false) return false;
+  return value === "folder" || value === "both" ? value : "program";
+}
+
+/** The tab number in front of names (`number` prop): on by default, `false` turns it off, a string is the format (`"{n}: {name}"`). */
+function numberMode() {
+  const value = props()?.number;
+  if (value === false) return false;
+  return typeof value === "string" && value.includes("{name}") ? value : true;
+}
+
 function currentAgentTabs() {
-  return agentTabs(spaces(), panes(), terminals());
+  return agentTabs(spaces(), panes(), terminals(), { shells: shellsMode() });
 }
 
 export default class TabNamer extends View {
@@ -97,7 +115,7 @@ export default class TabNamer extends View {
   apply(tabs, force) {
     const owned = /** @type {Record<string, import("./naming.js").Owned>} */ (shared(OWNED) ?? {});
     const tabIds = new Set(spaces().flatMap((s) => s.tabs.map((t) => t.id)));
-    const next = reconcile(tabs, { owned, pending: this.pending, tasks: this.tasks, now: Date.now(), tabIds, force });
+    const next = reconcile(tabs, { owned, pending: this.pending, tasks: this.tasks, now: Date.now(), tabIds, force, number: numberMode(), shells: shellsMode() });
     for (const r of next.renames) run("tab.rename", { id: r.id, name: r.name });
     this.pending = next.pending;
     if (JSON.stringify(next.owned) !== JSON.stringify(owned)) setShared(OWNED, next.owned);
@@ -107,9 +125,10 @@ export default class TabNamer extends View {
     const t = /** @type {Record<string, import("gpui-kit").Color>} */ (theme());
     const on = this.enabled();
     const { named, total } = countNamed(currentAgentTabs());
+    const kind = shellsMode() ? "tabs" : "agent tabs";
     const tip = on
-      ? `Tab namer is on: ${named} of ${total} agent tabs named. Click to re-apply names, right-click to turn it off.`
-      : "Tab namer is off: agent tabs keep their numbers. Click to turn it on.";
+      ? `Tab namer is on: ${named} of ${total} ${kind} named. Click to re-apply names, right-click to turn it off.`
+      : `Tab namer is off: ${kind} keep their numbers. Click to turn it on.`;
     /** Click: re-apply names (turning it on when off). Right-click: on/off. */
     const controls = (/** @type {any} */ el) => el.tooltip(tip)
       .on_mouse_down("left", (/** @type {any} */ _e, /** @type {Context} */ cx) => cx.stop_propagation())

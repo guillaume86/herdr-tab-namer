@@ -1,16 +1,18 @@
 // Naming rules for agent tabs, kept free of Herdr imports so Node's test
 // runner can load this file directly (see test/naming.test.js).
 
-/** @typedef {{ key?: string, name?: string, agent?: boolean }} Program */
-/** @typedef {{ tab: string, terminal: string | null, status: string | null, program?: Program, title?: string }} Pane */
+/** @typedef {{ key?: string, name?: string, agent?: boolean, shell?: boolean }} Program */
+/** @typedef {{ tab: string, terminal: string | null, status: string | null, program?: Program, title?: string, cwd?: string | null }} Pane */
 /** @typedef {{ address: string, name?: string | null, title?: string | null, labels?: Record<string, string> }} Terminal */
-/** @typedef {{ id: string, name: string, named: boolean }} Tab */
+/** @typedef {{ id: string, name: string, named: boolean, index?: number }} Tab */
 /** @typedef {{ tabs?: Tab[] }} Space */
 /** @typedef {{ project: string, title: string }} Task */
 /** @typedef {Map<string, Task>} Tasks */
-/** @typedef {Tab & { pane: Pane, terminal: Terminal | null }} AgentTab */
-/** @typedef {{ name: string, at: number }} Sent */
-/** @typedef {string | { name: string, prev: string }} Owned */
+/** @typedef {Tab & { pane: Pane, terminal: Terminal | null, agent?: boolean }} AgentTab */
+/** @typedef {{ name: string, at: number, base?: string }} Sent */
+/** @typedef {string | { name: string, prev?: string, base?: string }} Owned */
+/** What a tab without an agent is named after: its program, its folder, both, or nothing (false). */
+/** @typedef {"program" | "folder" | "both" | false | null | undefined} Shells */
 
 /** Longest tab name the mod writes, in characters (code points). */
 export const MAX_NAME = 40;
@@ -173,20 +175,68 @@ export function generalName(terminal, pane) {
 }
 
 /**
- * The name a tab should carry: Firstmate's task first, then the general sources.
- * `fallback`: only the bare task id, because the Firstmate home doesn't know the task.
+ * The last folder of a path (`/home/me/src/app` -> `app`), `~` for a home folder.
+ * @param {string | null | undefined} cwd
+ */
+export function folderName(cwd) {
+  const path = String(cwd ?? "").trim().replace(/[\\/]+$/, "");
+  if (!path) return "";
+  if (path === "~" || /^(?:\/home\/[^/]+|\/root|\/Users\/[^/]+|[A-Za-z]:\\Users\\[^\\]+)$/.test(path)) return "~";
+  return path.split(/[\\/]/).pop() || path;
+}
+
+/**
+ * What a tab with no agent is named after (`shells`): its program ("PowerShell", "Neovim"),
+ * its folder, or `program · folder`. Null when it says nothing.
+ * @param {Partial<Pane>} pane
+ * @param {Shells} shells
+ */
+export function shellName(pane, shells) {
+  if (!shells) return null;
+  const program = String(pane?.program?.name ?? "").trim();
+  const folder = folderName(pane?.cwd);
+  const parts = shells === "program" ? [program] : shells === "folder" ? [folder] : [program, folder];
+  const name = parts.filter(Boolean).join(" · ");
+  return name ? truncate(name) : null;
+}
+
+/**
+ * The name a tab should carry: Firstmate's task first, then the general sources. A tab
+ * without an agent (only listed when `shells` is on) is named after its program or folder.
+ * `fallback`: a name that only names a tab that has none (a bare task id the Firstmate
+ * home doesn't know, or an agent's program name before it says what it works on).
  * @param {AgentTab} entry
  * @param {Tasks} tasks
+ * @param {{ shells?: Shells }} [options]
  * @returns {{ name: string, fallback: boolean } | null}
  */
-export function wantedName(entry, tasks) {
+export function wantedName(entry, tasks, { shells = null } = {}) {
+  if (entry.agent === false) {
+    const name = shellName(entry.pane, shells);
+    return name ? { name, fallback: false } : null;
+  }
   const label = entry.terminal?.labels?.[FIRSTMATE_TASK];
   if (typeof label === "string" && label) {
     const name = firstmateName(label, tasks);
     return name ? { name, fallback: false } : { name: truncate(taskId(label)), fallback: true };
   }
   const name = generalName(entry.terminal, entry.pane);
-  return name ? { name, fallback: false } : null;
+  if (name) return { name, fallback: false };
+  const program = shells ? shellName(entry.pane, "program") : null;
+  return program ? { name: program, fallback: true } : null;
+}
+
+/**
+ * `number` on: the tab's position in front of its name (`2 Fix login`), so the name says
+ * which `tab.select:<n>` key reaches it. A string is the format: `{n}` and `{name}`.
+ * @param {number | undefined} index
+ * @param {string} base
+ * @param {boolean | string | null | undefined} number
+ */
+export function formatName(index, base, number) {
+  if (!number || !Number.isInteger(index)) return base;
+  const format = typeof number === "string" && number.includes("{name}") ? number : "{n} {name}";
+  return format.replace("{n}", String(index)).replace("{name}", base);
 }
 
 /**
@@ -201,25 +251,30 @@ function isAgentPane(pane, terminal) {
 
 /**
  * Tabs that run an agent, each with the pane and core terminal its name comes from:
- * a Firstmate task's terminal first, else the tab's first agent. Plain shells don't count.
+ * a Firstmate task's terminal first, else the tab's first agent. Tabs with only plain
+ * shells count when `shells` is on, by their first terminal (`agent: false`).
  * @param {Space[]} spaces
  * @param {Pane[]} panes
  * @param {Terminal[]} terminals
  * @returns {AgentTab[]}
  */
-export function agentTabs(spaces, panes, terminals) {
+export function agentTabs(spaces, panes, terminals, { shells = null } = {}) {
   const byAddress = new Map((terminals ?? []).map((t) => [t.address, t]));
   /** @type {AgentTab[]} */
   const out = [];
   for (const space of spaces ?? []) {
     for (const tab of space.tabs ?? []) {
-      const agents = (panes ?? [])
-        .filter((p) => p.tab === tab.id)
-        .map((pane) => ({ pane, terminal: byAddress.get(pane.terminal) ?? null }))
-        .filter(({ pane, terminal }) => isAgentPane(pane, terminal));
-      if (!agents.length) continue;
-      const pick = agents.find((a) => a.terminal?.labels?.[FIRSTMATE_TASK]) ?? agents[0];
-      out.push({ id: tab.id, name: tab.name, named: tab.named, ...pick });
+      const all = (panes ?? [])
+        .filter((p) => p.tab === tab.id && p.terminal)
+        .map((pane) => ({ pane, terminal: byAddress.get(pane.terminal) ?? null }));
+      const agents = all.filter(({ pane, terminal }) => isAgentPane(pane, terminal));
+      const own = { id: tab.id, name: tab.name, named: tab.named, ...(tab.index !== undefined && { index: tab.index }) };
+      if (agents.length) {
+        const pick = agents.find((a) => a.terminal?.labels?.[FIRSTMATE_TASK]) ?? agents[0];
+        out.push({ ...own, ...pick });
+      } else if (shells && all.length) {
+        out.push({ ...own, ...all[0], agent: false });
+      }
     }
   }
   return out;
@@ -244,40 +299,58 @@ export function countNamed(tabs) {
  * Returns the renames to run and the next `owned` / `pending`.
  * `tabIds` (every tab that exists) prunes ownership of closed tabs. `force` (a click)
  * sends a wanted rename again even while the same one is still pending.
+ * `number` puts the tab's position in front (see formatName); the name without it is kept
+ * as `base`, so a tab that moves is renumbered with the name it had. `shells` names tabs
+ * without an agent (see shellName) and lets an agent with nothing to say be named after
+ * its program, but only while its tab has no name.
  * @param {AgentTab[]} tabs
- * @param {{ owned?: Record<string, Owned>, pending?: Record<string, Sent>, tasks?: Tasks, now?: number, tabIds?: Set<string> | null, force?: boolean }} state
+ * @param {{ owned?: Record<string, Owned>, pending?: Record<string, Sent>, tasks?: Tasks, now?: number, tabIds?: Set<string> | null, force?: boolean, number?: boolean | string | null, shells?: Shells }} state
  */
-export function reconcile(tabs, { owned = {}, pending = {}, tasks = new Map(), now = 0, tabIds = null, force = false }) {
-  /** @type {Record<string, { name: string, prev?: string }>} */
+export function reconcile(tabs, { owned = {}, pending = {}, tasks = new Map(), now = 0, tabIds = null, force = false, number = null, shells = null }) {
+  /** @type {Record<string, { name: string, prev?: string, base?: string }>} */
   const nextOwned = {};
   /** @type {Record<string, Sent>} */
   const nextPending = {};
   for (const [id, entry] of Object.entries(owned)) {
-    if (!tabIds || tabIds.has(id)) nextOwned[id] = typeof entry === "string" ? { name: entry } : entry;
+    if (!tabIds || tabIds.has(id)) nextOwned[id] = typeof entry === "string" ? { name: entry } : { ...entry };
   }
   /** @type {{ id: string, name: string }[]} */
   const renames = [];
   for (const tab of tabs) {
     const sent = pending[tab.id];
-    if (tab.named && (tab.name === sent?.name || tab.name === nextOwned[tab.id]?.name)) nextOwned[tab.id] = { name: tab.name };
+    if (tab.named && tab.name === sent?.name) nextOwned[tab.id] = { name: tab.name, base: sent.base };
+    else if (tab.named && tab.name === nextOwned[tab.id]?.name) nextOwned[tab.id] = { name: tab.name, base: nextOwned[tab.id].base };
     else if (sent && now - sent.at < PENDING_MS) nextPending[tab.id] = sent;
     const mine = nextOwned[tab.id];
     if (tab.named && tab.name !== mine?.name && tab.name !== mine?.prev && !nextPending[tab.id]) {
       delete nextOwned[tab.id]; // a person's name
       continue;
     }
-    const want = wantedName(tab, tasks);
-    if (!want || (tab.named && tab.name === want.name)) continue;
-    // A bare task id never replaces a name this mod already gave (a backlog that couldn't
-    // be read, or another copy pointed at another home).
-    if (want.fallback && tab.named) continue;
-    if (!force && nextPending[tab.id]?.name === want.name) continue;
-    renames.push({ id: tab.id, name: want.name });
-    nextOwned[tab.id] = tab.named ? { name: want.name, prev: tab.name } : { name: want.name };
-    nextPending[tab.id] = { name: want.name, at: now };
+    const want = wantedName(tab, tasks, { shells });
+    // The name without its number. A fallback (a bare task id, an agent's program name)
+    // never replaces a name this mod already gave, and a source with nothing to say keeps
+    // it: then the base is the one the tab has, renumbered if the tab moved.
+    /** @type {string | null} */
+    let base = null;
+    if (want && !(want.fallback && tab.named)) base = want.name;
+    else if (tab.named && mine) base = mine.base ?? mine.name;
+    if (base === null) continue;
+    const name = formatName(tab.index, base, number);
+    if (tab.named && tab.name === name) {
+      if (mine && mine.name === name) mine.base = base;
+      continue;
+    }
+    if (!force && nextPending[tab.id]?.name === name) continue;
+    renames.push({ id: tab.id, name });
+    nextOwned[tab.id] = tab.named ? { name, prev: tab.name, base } : { name, base };
+    nextPending[tab.id] = base === name ? { name, at: now } : { name, at: now, base };
   }
   /** @type {Record<string, Owned>} */
   const savedOwned = {};
-  for (const [id, { name, prev }] of Object.entries(nextOwned)) savedOwned[id] = prev === undefined ? name : { name, prev };
+  for (const [id, { name, prev, base }] of Object.entries(nextOwned)) {
+    const keepBase = base !== undefined && base !== name;
+    savedOwned[id] = prev === undefined && !keepBase ? name
+      : { name, ...(prev !== undefined && { prev }), ...(keepBase && { base }) };
+  }
   return { renames, owned: savedOwned, pending: nextPending };
 }
