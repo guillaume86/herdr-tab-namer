@@ -68,22 +68,21 @@ with none of these stays unnamed until one shows up.
 
 4. Check it: `herdr-app check ~/.config/herdr-app/mods/herdr-tab-namer`.
 
-### Button right after the tabs (this fork)
+### In the status bar (this fork)
 
-On Windows and Linux the tab bar ends with the window buttons, so a block after it puts
-the button past the close button. With `"tab_bar": true` the mod draws the whole tab bar
-itself (a copy of Herdr's shipped `tabs` mod, `tabbar.js`) with the button right after
-the last tab. Point the top bar block at it instead of `tabs`:
+With `"status_bar": true` the mod draws a strip for the bottom status bar instead of the
+top-bar button, styled like Herdr's status blocks: chrome background, 11.8 px text, a
+tag icon and `n/m named` (`names off` when off). The icon is the theme's `done` color,
+`working` while an agent tab has no name yet, faded when off. `"border": "top"` draws the
+bar's line. Clicks are the same: click re-applies names, right-click turns it on or off.
+Add it as a block of the status bar row:
 
 ```json
-{ "id": "tabs", "type": "block", "size": { "px": 42 }, "window_drag": true,
-  "content": { "mod": "herdr-tab-namer", "props": { "tab_bar": true } } }
+{ "id": "tab-namer", "type": "block", "size": { "px": 110 },
+  "content": { "mod": "herdr-tab-namer", "props": { "status_bar": true, "border": "top" } } }
 ```
 
-The copy is not updated with Herdr: after an update, diff `tabbar.js` against
-`~/.config/herdr-app/mods/tabs/main.js`.
-
-The button starts with the window, because it is part of the layout.
+`tag.svg` is Lucide's `tag` icon (ISC License).
 
 ## Develop
 

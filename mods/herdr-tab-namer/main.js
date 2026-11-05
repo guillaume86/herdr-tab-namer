@@ -1,8 +1,7 @@
-import { View, div } from "gpui-kit";
+import { View, div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { spaces, panes, terminals, theme, run, shared, setShared, props, readTextFile, home } from "herdr";
 import { FIRSTMATE_TASK, agentTabs, countNamed, parseBacklog, reconcile, taskId } from "./naming.js";
-import { TabBar } from "./tabbar.js";
 
 /** @typedef {import("gpui-kit").Context} Context */
 /** @typedef {import("./naming.js").AgentTab} AgentTab */
@@ -41,8 +40,8 @@ export default class TabNamer extends View {
     this.tasks = new Map();
     this.backlogAt = 0;
     this.loading = false;
-    // `tab_bar: true`: this block is the whole tab bar, with the button after the tabs.
-    this.bar = props()?.tab_bar === true ? new TabBar() : null;
+    // `status_bar: true`: drawn as a strip of the bottom status bar instead of a button.
+    this.statusBar = props()?.status_bar === true;
     cx.timer.every(TICK_MS, (cx) => this.tick(cx, false));
     this.tick(cx, false);
   }
@@ -111,30 +110,52 @@ export default class TabNamer extends View {
     const tip = on
       ? `Tab namer is on: ${named} of ${total} agent tabs named. Click to re-apply names, right-click to turn it off.`
       : "Tab namer is off: agent tabs keep their numbers. Click to turn it on.";
-    // On: a calm button with a filled dot in the theme's "done" color. Off: the theme's
-    // "blocked" color on the border, text and a hollow dot, so it asks to be turned on.
-    const tint = on ? t.done : t.blocked;
-    const button = h_flex().id("tab-namer").h(26).px(9).gap(6).flex_none().items_center().rounded(6)
-      .text_size(12).border(1).border_color(on ? t.border : t.blocked)
-      .bg(on ? t.raised : t.chrome).text_color(on ? t.foreground : t.blocked)
-      .hover((s) => s.bg(t.hover))
-      .tooltip(tip)
-      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-      .on_mouse_down("right", (_e, cx) => {
+    /** Click: re-apply names (turning it on when off). Right-click: on/off. */
+    const controls = (/** @type {any} */ el) => el.tooltip(tip)
+      .on_mouse_down("left", (/** @type {any} */ _e, /** @type {Context} */ cx) => cx.stop_propagation())
+      .on_mouse_down("right", (/** @type {any} */ _e, /** @type {Context} */ cx) => {
         cx.stop_propagation();
         setShared(ENABLED, !on);
         cx.notify();
       })
-      .on_click((_e, cx) => {
+      .on_click((/** @type {any} */ _e, /** @type {Context} */ cx) => {
         if (!on) setShared(ENABLED, true);
         this.tick(cx, true);
         cx.notify();
-      })
+      });
+    if (this.statusBar) return this.renderStatus(t, on, named, total, controls);
+    // On: a calm button with a filled dot in the theme's "done" color. Off: the theme's
+    // "blocked" color on the border, text and a hollow dot, so it asks to be turned on.
+    const tint = on ? t.done : t.blocked;
+    const button = controls(h_flex().id("tab-namer").h(26).px(9).gap(6).flex_none().items_center().rounded(6)
+      .text_size(12).border(1).border_color(on ? t.border : t.blocked)
+      .bg(on ? t.raised : t.chrome).text_color(on ? t.foreground : t.blocked)
+      .hover((s) => s.bg(t.hover)))
       .child(div().size(7).flex_none().rounded(4).when(on, (d) => d.bg(tint)).when(!on, (d) => d.border(1).border_color(tint)))
       .child(div().child(`Tabs ${named}/${total}`));
-    if (this.bar) return this.bar.render(button);
     return h_flex().id("root").size_full().px(6).items_center().justify_center()
       .bg(t.chrome).border_b(1).border_color(t.border)
       .child(button);
+  }
+
+  /**
+   * `status_bar: true`: a strip for the bottom status bar, styled like its neighbours
+   * (chrome background, 11.8 px text, dim words, `border: "top"` draws the bar's line).
+   * On: a tag icon in the theme's `done` color (`working` while some agent tab has no
+   * name yet) and `n/m named`. Off: a faded icon and `names off`.
+   * @param {Record<string, import("gpui-kit").Color>} t
+   * @param {boolean} on
+   * @param {number} named
+   * @param {number} total
+   * @param {(el: any) => any} controls
+   */
+  renderStatus(t, on, named, total, controls) {
+    const edge = props()?.border;
+    const icon = on ? (named < total ? t.working : t.done) : t.dim;
+    return controls(h_flex().id("root").size_full().px(12).gap(6).items_center().bg(t.chrome).text_size(11.8).cursor_pointer())
+      .when(edge === "top", (el) => el.border_t(1).border_color(t.border))
+      .when(edge === "bottom", (el) => el.border_b(1).border_color(t.border))
+      .child(svg("mods/herdr-tab-namer/tag.svg").size(13).flex_none().text_color(icon).opacity(on ? 1 : 0.6))
+      .child(div().text_color(on ? t.muted : t.dim).child(on ? `${named}/${total} named` : "names off"));
   }
 }
