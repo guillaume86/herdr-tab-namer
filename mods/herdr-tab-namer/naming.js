@@ -227,7 +227,7 @@ export function wantedName(entry, tasks, { shells = null } = {}) {
 }
 
 /**
- * `number` on: the tab's position in front of its name (`2 Fix login`), so the name says
+ * `number` on: the tab's position in front of its name (`2 · Fix login`), so the name says
  * which `tab.select:<n>` key reaches it. A string is the format: `{n}` and `{name}`.
  * @param {number | undefined} index
  * @param {string} base
@@ -235,7 +235,7 @@ export function wantedName(entry, tasks, { shells = null } = {}) {
  */
 export function formatName(index, base, number) {
   if (!number || !Number.isInteger(index)) return base;
-  const format = typeof number === "string" && number.includes("{name}") ? number : "{n} {name}";
+  const format = typeof number === "string" && number.includes("{name}") ? number : "{n} · {name}";
   return format.replace("{n}", String(index)).replace("{name}", base);
 }
 

@@ -77,7 +77,7 @@ Two more props, both on by default in this fork:
   folder, `~` at home), `"both"` (`Neovim · app`), or `false` to leave them alone as
   upstream does. An agent tab whose agent has said nothing yet is named after its
   program (`Claude Code`) while it has no name; that never replaces a better name.
-- `number`: the tab's position in front of every name the mod writes (`2 Fix login`), so
+- `number`: the tab's position in front of every name the mod writes (`2 · Fix login`), so
   the name says which `tab.select:<n>` key reaches it. `false` turns it off; a string is
   the format, with `{n}` and `{name}` (`"{n}: {name}"`). The name without its number is
   remembered, so a tab that moves is renumbered and keeps its name. Names you gave are
