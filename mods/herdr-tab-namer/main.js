@@ -2,6 +2,7 @@ import { View, div } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { spaces, panes, terminals, theme, run, shared, setShared, props, readTextFile, home } from "herdr";
 import { FIRSTMATE_TASK, agentTabs, countNamed, parseBacklog, reconcile, taskId } from "./naming.js";
+import { TabBar } from "./tabbar.js";
 
 /** @typedef {import("gpui-kit").Context} Context */
 /** @typedef {import("./naming.js").AgentTab} AgentTab */
@@ -40,6 +41,8 @@ export default class TabNamer extends View {
     this.tasks = new Map();
     this.backlogAt = 0;
     this.loading = false;
+    // `tab_bar: true`: this block is the whole tab bar, with the button after the tabs.
+    this.bar = props()?.tab_bar === true ? new TabBar() : null;
     cx.timer.every(TICK_MS, (cx) => this.tick(cx, false));
     this.tick(cx, false);
   }
@@ -129,6 +132,7 @@ export default class TabNamer extends View {
       })
       .child(div().size(7).flex_none().rounded(4).when(on, (d) => d.bg(tint)).when(!on, (d) => d.border(1).border_color(tint)))
       .child(div().child(`Tabs ${named}/${total}`));
+    if (this.bar) return this.bar.render(button);
     return h_flex().id("root").size_full().px(6).items_center().justify_center()
       .bg(t.chrome).border_b(1).border_color(t.border)
       .child(button);

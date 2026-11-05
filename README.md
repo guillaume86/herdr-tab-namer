@@ -68,6 +68,21 @@ with none of these stays unnamed until one shows up.
 
 4. Check it: `herdr-app check ~/.config/herdr-app/mods/herdr-tab-namer`.
 
+### Button right after the tabs (this fork)
+
+On Windows and Linux the tab bar ends with the window buttons, so a block after it puts
+the button past the close button. With `"tab_bar": true` the mod draws the whole tab bar
+itself (a copy of Herdr's shipped `tabs` mod, `tabbar.js`) with the button right after
+the last tab. Point the top bar block at it instead of `tabs`:
+
+```json
+{ "id": "tabs", "type": "block", "size": { "px": 42 }, "window_drag": true,
+  "content": { "mod": "herdr-tab-namer", "props": { "tab_bar": true } } }
+```
+
+The copy is not updated with Herdr: after an update, diff `tabbar.js` against
+`~/.config/herdr-app/mods/tabs/main.js`.
+
 The button starts with the window, because it is part of the layout.
 
 ## Develop
