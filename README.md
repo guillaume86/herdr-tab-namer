@@ -1,5 +1,9 @@
 # herdr-tab-namer
 
+> Fork of [FlitCatz/herdr-tab-namer](https://github.com/FlitCatz/herdr-tab-namer) that also
+> names shell tabs after their program and can sit in the status bar. See
+> [Shell tabs](#shell-tabs-this-fork) and [In the status bar](#in-the-status-bar-this-fork).
+
 A [Herdr](https://herdr.dev) mod that names agent tabs after the work they run, so a tab
 bar of `1`, `2`, `3` becomes `my-app · fix login`, `Refactor auth`, ... It sits as a small
 button in the window's top bar: the button shows how many agent tabs are named
@@ -11,7 +15,8 @@ button in the window's top bar: the button shows how many agent tabs are named
 
 - Every few seconds it looks at tabs that run an agent (a terminal whose program reports a
   status, or one Firstmate labelled) and gives each unnamed one a name with `tab.rename`.
-  Tabs with only plain shells are left alone.
+  Tabs with only plain shells are left alone upstream; this fork names them after their
+  program by default (see [Shell tabs](#shell-tabs-this-fork)).
 - It never overwrites a name a person gave: it remembers which names it set itself, and
   only updates those. Rename a tab by hand and the namer leaves it for good.
 - Its own names only get better: a tab keeps its name when the source goes quiet, and a
