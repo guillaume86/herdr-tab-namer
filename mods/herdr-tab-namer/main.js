@@ -165,9 +165,13 @@ export default class TabNamer extends View {
     const edge = props()?.border;
     // On: the muted grey of the native items (`working` while some tab has no name yet). Off: faded dim.
     const icon = on ? (named < total ? t.working : t.muted) : t.dim;
-    return controls(h_flex().id("root").size_full().px(8).items_center().justify_center().bg(t.chrome).text_size(11.8).cursor_pointer())
+    // The icon sits in a pill that lights up on hover like the tab bar's Files / Changes buttons:
+    // 2 px outside + 6 px inside keeps it 16 px from its neighbours, and 21 px tall in a 30 px bar
+    // it sits on whole pixels at 100, 110 and 120 % zoom.
+    return controls(h_flex().id("root").size_full().px(2).items_center().justify_center().bg(t.chrome).text_size(11.8).cursor_pointer())
       .when(edge === "top", (el) => el.border_t(1).border_color(t.border))
       .when(edge === "bottom", (el) => el.border_b(1).border_color(t.border))
-      .child(svg("mods/herdr-tab-namer/tag.svg").size(13).flex_none().text_color(icon).opacity(on ? 1 : 0.6));
+      .child(h_flex().id("pill").flex_none().h(21).px(6).rounded(6).items_center().hover((s) => s.bg(t.hover))
+        .child(svg("mods/herdr-tab-namer/tag.svg").size(13).flex_none().text_color(icon).opacity(on ? 1 : 0.6)));
   }
 }
