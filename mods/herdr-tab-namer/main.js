@@ -153,8 +153,8 @@ export default class TabNamer extends View {
   /**
    * `status_bar: true`: a strip for the bottom status bar, styled like the native items: the
    * tag icon alone, 13 px, 8 px of padding a side (16 px from its neighbours), the count on
-   * hover. On: the theme's `done` color (`working` while some agent tab has no name yet).
-   * Off: faded.
+   * hover. On: the dim grey of the native icons (`working` while some agent tab has no name
+   * yet). Off: the same, faded.
    * @param {Record<string, import("gpui-kit").Color>} t
    * @param {boolean} on
    * @param {number} named
@@ -163,7 +163,8 @@ export default class TabNamer extends View {
    */
   renderStatus(t, on, named, total, controls) {
     const edge = props()?.border;
-    const icon = on ? (named < total ? t.working : t.done) : t.dim;
+    // On: the plain dim grey of the native icons (`working` while some tab has no name yet). Off: faded.
+    const icon = on && named < total ? t.working : t.dim;
     return controls(h_flex().id("root").size_full().px(8).items_center().justify_center().bg(t.chrome).text_size(11.8).cursor_pointer())
       .when(edge === "top", (el) => el.border_t(1).border_color(t.border))
       .when(edge === "bottom", (el) => el.border_b(1).border_color(t.border))
