@@ -120,8 +120,8 @@ export default class TabNamer extends View {
     const { named, total } = countNamed(currentAgentTabs());
     const kind = shellsMode() ? "tabs" : "agent tabs";
     const tip = on
-      ? `Tab namer is on: ${named} of ${total} ${kind} named. Click to re-apply names, right-click to turn it off.`
-      : `Tab namer is off: ${kind} keep their numbers. Click to turn it on.`;
+      ? `${named}/${total} ${kind} named\nTab namer is on. Click to re-apply names, right-click to turn it off.`
+      : `Tab namer is off: ${kind} keep their numbers.\nClick to turn it on.`;
     /** Click: re-apply names (turning it on when off). Right-click: on/off. */
     const controls = (/** @type {any} */ el) => el.tooltip(tip)
       .on_mouse_down("left", (/** @type {any} */ _e, /** @type {Context} */ cx) => cx.stop_propagation())
@@ -151,10 +151,10 @@ export default class TabNamer extends View {
   }
 
   /**
-   * `status_bar: true`: a strip for the bottom status bar, styled like its neighbours
-   * (chrome background, 11.8 px text, dim words, `border: "top"` draws the bar's line).
-   * On: a tag icon in the theme's `done` color (`working` while some agent tab has no
-   * name yet) and `n/m named`. Off: a faded icon and `names off`.
+   * `status_bar: true`: a strip for the bottom status bar, styled like the native items: the
+   * tag icon alone, 13 px, 8 px of padding a side (16 px from its neighbours), the count on
+   * hover. On: the theme's `done` color (`working` while some agent tab has no name yet).
+   * Off: faded.
    * @param {Record<string, import("gpui-kit").Color>} t
    * @param {boolean} on
    * @param {number} named
@@ -164,10 +164,9 @@ export default class TabNamer extends View {
   renderStatus(t, on, named, total, controls) {
     const edge = props()?.border;
     const icon = on ? (named < total ? t.working : t.done) : t.dim;
-    return controls(h_flex().id("root").size_full().px(12).gap(6).items_center().bg(t.chrome).text_size(11.8).cursor_pointer())
+    return controls(h_flex().id("root").size_full().px(8).items_center().justify_center().bg(t.chrome).text_size(11.8).cursor_pointer())
       .when(edge === "top", (el) => el.border_t(1).border_color(t.border))
       .when(edge === "bottom", (el) => el.border_b(1).border_color(t.border))
-      .child(svg("mods/herdr-tab-namer/tag.svg").size(13).flex_none().text_color(icon).opacity(on ? 1 : 0.6))
-      .child(div().text_color(on ? t.muted : t.dim).child(on ? `${named}/${total} named` : "names off"));
+      .child(svg("mods/herdr-tab-namer/tag.svg").size(13).flex_none().text_color(icon).opacity(on ? 1 : 0.6));
   }
 }
